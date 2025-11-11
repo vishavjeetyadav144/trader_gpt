@@ -186,10 +186,10 @@ class Position(Document):
         if self.ai_decision:
             self.ai_decision.evaluate_outcome(
                 current_price=Decimal(str(exit_price)),
-                realized_pnl_usd=realized_pnl_usd
+                realized_pnl_usd=self.realized_pnl_usd
             )
         
-        return realized_pnl_usd
+        return self.realized_pnl_usd
 
     def __str__(self):
         return f"{self.side.upper()} {self.quantity} {self.symbol} @ {self.entry_price}"
