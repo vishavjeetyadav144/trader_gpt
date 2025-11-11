@@ -428,7 +428,7 @@ class TradingDecisionService:
                 logger.info(f"Found {len(similar_memories)} similar past decisions")
             
             final_decision = initial_decision
-
+            
             if len(similar_memories) > 0: 
 
                 # 6. Create enhanced prompt with memory context
