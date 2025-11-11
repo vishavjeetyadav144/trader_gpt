@@ -451,7 +451,7 @@ class TradingDecisionService:
             ai_decision = None
             memory_id = None
             order_result = None
-            if final_decision['confidence'] >= 60:
+            if final_decision['confidence'] >= 70:
                 # 8. Save decision to database
                 ai_decision = self._save_decision(symbol, final_decision, prompt_data.get("market_data"))
                 
