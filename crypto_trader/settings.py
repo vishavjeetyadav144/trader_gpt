@@ -215,46 +215,40 @@ LOGGING = {
     "version": 1,
     "disable_existing_loggers": False,
     "formatters": {
-        "verbose": {
-            "format": "{levelname} {asctime} {module} {process:d} {thread:d} {message}",
-            "style": "{",
-        },
         "simple": {
-            "format": "{levelname} {message}",
+            "format": "{levelname} {asctime} {name}: {message}",
             "style": "{",
         },
     },
     "handlers": {
-        "file": {
-            "level": "INFO",
-            "class": "logging.FileHandler",
-            "filename": BASE_DIR / "logs" / "crypto_trader.log",
-            "formatter": "verbose",
-        },
         "console": {
             "level": "DEBUG",
             "class": "logging.StreamHandler",
             "formatter": "simple",
         },
     },
+    "root": {
+        "handlers": ["console"],
+        "level": "INFO",
+    },
     "loggers": {
         "django": {
-            "handlers": ["file", "console"],
+            "handlers": ["console"],
             "level": "INFO",
             "propagate": True,
         },
         "crypto_trader": {
-            "handlers": ["file", "console"],
+            "handlers": ["console"],
             "level": "DEBUG",
             "propagate": False,
         },
         "trading": {
-            "handlers": ["file", "console"],
+            "handlers": ["console"],
             "level": "DEBUG",
             "propagate": False,
         },
         "ai_engine": {
-            "handlers": ["file", "console"],
+            "handlers": ["console"],
             "level": "DEBUG",
             "propagate": False,
         },
