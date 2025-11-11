@@ -419,6 +419,8 @@ class TradingDecisionService:
                 similar_memories = self.memory_service.find_similar_decisions(
                     current_reasoning=initial_decision['reasoning'],
                     symbol=symbol,
+                    market_context=prompt_data.get("market_data"),
+                    risk_factors=initial_decision['risk_factors'],
                     top_k=50
                 )
                 memory_summary = self.memory_service.get_memory_summary(similar_memories)

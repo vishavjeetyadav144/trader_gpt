@@ -92,11 +92,20 @@ class PineconeMemoryService:
             logger.error(f"Error storing decision memory: {e}")
             return None
     
-    def find_similar_decisions(self, current_reasoning: str, symbol: str, top_k: int = 3, min_similarity: float = 0.6) -> List[Dict]:
+    def find_similar_decisions(self, current_reasoning: str, symbol: str, market_context: Optional[Dict] = None, risk_factors: Optional[List[str]] = None, top_k: int = 3, min_similarity: float = 0.7) -> List[Dict]:
         """Find similar past decisions using semantic search"""
         try:
             # Create search query embedding
-            query_embedding = self.encoder.encode(current_reasoning).tolist()
+            query_parts = [f"Symbol: {symbol}", f"Reasoning: {current_reasoning}"]
+            if risk_factors:
+                query_parts.append(f"Risk factors: {', '.join(risk_factors)}")
+
+            if market_context:
+                market_summary = self.summarize_market_context(market_context)
+                query_parts.append(f"Market context summary: {market_summary}")
+
+            query_text = " ".join(query_parts)
+            query_embedding = self.encoder.encode(query_text).tolist()
             
             # Search in Pinecone
             results = self.index.query(
@@ -171,6 +180,74 @@ class PineconeMemoryService:
         
         return "PAST SIMILAR DECISIONS FOR CONTEXT:\n" + "\n".join(summary_parts)
     
+    def summarize_market_context(self, market_ctx: Dict) -> str:
+        """Summarize intraday and higher timeframe indicator snapshots (no series)."""
+        if not market_ctx:
+            return "No market context available."
+
+        try:
+            # --- Basic Market Snapshot ---
+            funding_rate = float(market_ctx.get("funding_rate", 0))
+            mark_change_24h = float(market_ctx.get("mark_change_24h", 0))
+            open_interest = market_ctx.get("open_interest", "N/A")
+
+            base_summary = (
+                f"24h Change: {mark_change_24h:.2f}%, "
+                f"Funding Rate: {funding_rate:.4f}, Open Interest: {open_interest}."
+            )
+
+            # --- Intraday (1m) Snapshot ---
+            intraday = market_ctx.get("intraday series (1m interval)", {})
+            rsi_1m = intraday.get("rsi_14", [])
+            macd_1m = intraday.get("macd", [])
+            ema_1m = intraday.get("ema20", [])
+            intraday_summary = ""
+            if rsi_1m and macd_1m and ema_1m:
+                intraday_summary = (
+                    f" 1m → RSI {rsi_1m[-1]:.1f}, MACD {macd_1m[-1]:.1f}, EMA20 {ema_1m[-1]:.1f}."
+                )
+
+            # --- Higher Timeframes (use only 'current' section) ---
+            higher_summaries = []
+            for key, tf_data in market_ctx.items():
+                if not key.startswith("higher timeframe"):
+                    continue
+
+                tf_name = key.split("(")[-1].replace(")", "").strip()
+                current = tf_data.get("current", {})
+
+                if not current:
+                    continue
+
+                rsi = current.get("rsi_14")
+                ema20 = current.get("ema20")
+                ema50 = current.get("ema50")
+                atr14 = current.get("atr_14")
+                atr3 = current.get("atr_3")
+                vol = current.get("volume")
+                avg_vol = current.get("avg_volume")
+
+                parts = [f"{tf_name.upper()} →"]
+                if rsi is not None:
+                    parts.append(f"RSI {rsi:.1f}")
+                if ema20 is not None and ema50 is not None:
+                    parts.append(f"EMA20 {ema20:.1f}, EMA50 {ema50:.1f}")
+                if atr14 is not None:
+                    parts.append(f"ATR14 {atr14:.1f}")
+                if atr3 is not None:
+                    parts.append(f"ATR3 {atr3:.1f}")
+                if vol is not None and avg_vol is not None:
+                    parts.append(f"Volume {vol}, AvgVol {avg_vol:.1f}")
+
+                higher_summaries.append(" ".join(parts))
+
+            higher_summary = " | ".join(higher_summaries) if higher_summaries else ""
+            return f"{base_summary}{intraday_summary} {higher_summary}".strip()
+
+        except Exception as e:
+            logger.error(f"Error summarizing market context: {e}")
+            return "Market context unavailable due to parsing error."
+
     def _create_memory_content(self, ai_decision: AIDecision, outcome_data: Optional[Dict]) -> Dict[str, str]:
         """Create searchable and full content for memory storage"""
         
@@ -179,13 +256,15 @@ class PineconeMemoryService:
             f"Trading decision: {ai_decision.decision_type}",
             f"Symbol: {ai_decision.symbol}",
             f"Reasoning: {ai_decision.reasoning}",
-            f"KEY FACTORS: {', '.join(ai_decision.risk_factors) if ai_decision.risk_factors else 'None'}",
-            # f"Market conditions: {json.dumps(ai_decision.market_context) if ai_decision.market_context else 'None'}"
         ]
         
         if ai_decision.risk_factors:
             searchable_parts.append(f"Key factors: {', '.join(ai_decision.risk_factors)}")
         
+        if ai_decision.market_context:
+            market_summary = self.summarize_market_context(ai_decision.market_context)
+            searchable_parts.append(f"Market context summary: {market_summary}")
+
         # Create full content (for detailed storage)
         full_content_parts = [
             f"TRADING DECISION RECORD",
@@ -196,11 +275,15 @@ class PineconeMemoryService:
             f"",
             f"KEY FACTORS:",
             f"{', '.join(ai_decision.risk_factors) if ai_decision.risk_factors else 'None'}",
-            # f"",
-            # f"MARKET CONTEXT:",
-            # f"{json.dumps(ai_decision.market_context, indent=2) if ai_decision.market_context else 'None'}"
         ]
-        
+
+        if ai_decision.market_context:
+            full_content_parts.extend([
+                "",
+                "MARKET CONTEXT SUMMARY:",
+                self.summarize_market_context(ai_decision.market_context),
+            ])
+            
         if outcome_data:
             full_content_parts.extend([
                 f"",
