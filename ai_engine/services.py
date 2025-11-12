@@ -452,7 +452,7 @@ class TradingDecisionService:
             ai_decision = None
             memory_id = None
             order_result = None
-            if final_decision['confidence'] >= 75:
+            if final_decision['confidence'] >= 75 and final_decision['signal'] in ['BUY', 'SELL']:
                 # 8. Save decision to database
                 ai_decision = self._save_decision(symbol, final_decision, prompt_data.get("market_data"))
                 
@@ -465,9 +465,8 @@ class TradingDecisionService:
                         ai_decision.save()
                 
                 # 10. Execute trade if confidence > 80%
-                if final_decision['signal'] in ['BUY', 'SELL']:
-                    logger.info(f"High confidence ({final_decision['confidence']}%) - executing trade")
-                    order_result = self._execute_high_confidence_trade(symbol, final_decision, ai_decision)
+                logger.info(f"High confidence ({final_decision['confidence']}%) - executing trade")
+                order_result = self._execute_high_confidence_trade(symbol, final_decision, ai_decision)
             else:
                 logger.info(f"Confidence too low ({final_decision['confidence']}%)")
 
