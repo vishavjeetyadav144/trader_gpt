@@ -23,13 +23,14 @@ class PineconeMemoryService:
         if not self.api_key:
             raise ValueError("Pinecone API key not configured")
         
+        self.dimension = 1024
         # Initialize Pinecone
         self.pc = Pinecone(api_key=self.api_key)
 
         if self.index_name not in [i.name for i in self.pc.list_indexes()]:
             self.pc.create_index(
                 name=self.index_name,
-                dimension=384,
+                dimension=self.dimension,
                 metric="cosine",
                 spec=ServerlessSpec(cloud="aws", region="us-east-1")
             )
@@ -37,7 +38,7 @@ class PineconeMemoryService:
         self.index = self.pc.Index(self.index_name)
 
         # Initialize sentence transformer for embeddings
-        self.encoder = SentenceTransformer('sentence-transformers/all-MiniLM-L6-v2')
+        self.encoder = SentenceTransformer('mixedbread-ai/mxbai-embed-large-v1')
     
     def store_decision_memory(self, ai_decision: AIDecision, outcome_data: Optional[Dict] = None):
         """Store AI decision in long-term memory"""
