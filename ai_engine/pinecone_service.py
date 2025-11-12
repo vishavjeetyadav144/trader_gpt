@@ -8,6 +8,7 @@ from sentence_transformers import SentenceTransformer
 from django.conf import settings
 
 from ai_engine.models import LongTermMemory, AIDecision
+from openai import OpenAI
 
 logger = logging.getLogger(__name__)
 
@@ -19,13 +20,21 @@ class PineconeMemoryService:
         self.api_key = settings.AI_CONFIG['PINECONE']['API_KEY']
         self.environment = settings.AI_CONFIG['PINECONE']['ENVIRONMENT']
         self.index_name = settings.AI_CONFIG['PINECONE']['INDEX_NAME']
+        self.openai_api_key = settings.AI_CONFIG['OPENAI']['API_KEY'] 
         
         if not self.api_key:
             raise ValueError("Pinecone API key not configured")
+        if not self.openai_api_key:
+            raise ValueError("OpenAI API key not configured")
+
         
-        self.dimension = 1024
         # Initialize Pinecone
         self.pc = Pinecone(api_key=self.api_key)
+        self.openai_client = OpenAI(api_key=self.openai_api_key)
+
+
+        self.embedding_model = "text-embedding-3-large"
+        self.dimension = 3072  # ✅ dimension for text-embedding-3-large
 
         if self.index_name not in [i.name for i in self.pc.list_indexes()]:
             self.pc.create_index(
@@ -38,7 +47,7 @@ class PineconeMemoryService:
         self.index = self.pc.Index(self.index_name)
 
         # Initialize sentence transformer for embeddings
-        self.encoder = SentenceTransformer('mixedbread-ai/mxbai-embed-large-v1')
+        # self.encoder = SentenceTransformer('mixedbread-ai/mxbai-embed-large-v1')
     
     def store_decision_memory(self, ai_decision: AIDecision, outcome_data: Optional[Dict] = None):
         """Store AI decision in long-term memory"""
@@ -48,10 +57,15 @@ class PineconeMemoryService:
                 return None
             # Create memory content
             memory_content = self._create_memory_content(ai_decision, outcome_data)
-            
-            # Generate embedding
-            embedding = self.encoder.encode(memory_content['searchable_text']).tolist()
-            
+            searchable_text = memory_content['searchable_text']
+
+            # ✅ Generate embedding via OpenAI
+            embedding_response = self.openai_client.embeddings.create(
+                model=self.embedding_model,
+                input=searchable_text
+            )
+            embedding = embedding_response.data[0].embedding
+
             # Create unique ID
             memory_id = f"decision_{ai_decision.decision_id}_{int(datetime.now(timezone.utc).timestamp())}"
             
@@ -93,7 +107,7 @@ class PineconeMemoryService:
             logger.error(f"Error storing decision memory: {e}")
             return None
     
-    def find_similar_decisions(self, current_reasoning: str, symbol: str, market_context: Optional[Dict] = None, risk_factors: Optional[List[str]] = None, top_k: int = 3, min_similarity: float = 0.8) -> List[Dict]:
+    def find_similar_decisions(self, current_reasoning: str, symbol: str, market_context: Optional[Dict] = None, risk_factors: Optional[List[str]] = None, top_k: int = 3, min_similarity: float = 0.7) -> List[Dict]:
         """Find similar past decisions using semantic search"""
         try:
             # Create search query embedding
@@ -106,8 +120,12 @@ class PineconeMemoryService:
                 query_parts.append(f"Market context summary: {market_summary}")
 
             query_text = " ".join(query_parts)
-            query_embedding = self.encoder.encode(query_text).tolist()
-            
+            embedding_response = self.openai_client.embeddings.create(
+                model=self.embedding_model,
+                input=query_text
+            )
+            query_embedding = embedding_response.data[0].embedding
+
             # Search in Pinecone
             results = self.index.query(
                 vector=query_embedding,
