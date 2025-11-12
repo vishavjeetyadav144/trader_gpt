@@ -223,6 +223,7 @@ class LLMPromptGenerator:
         ---
         ### POSITION & RISK RULES
         To ensure consistent profitability over time, strictly follow these constraints:
+        - The profit target must be at least +1% from the entry price
         - Maintain a **minimum Reward-to-Risk (RRR)** of **at least 1.5:1** (e.g. aiming for +1.5% gain if risking −1%).
         - The stop-loss and take-profit levels should be chosen such that over many trades, the strategy remains **positively skewed** (expected value > 0).
         - Favor setups where technical confluence and higher-timeframe trend agree with direction.
@@ -428,7 +429,7 @@ class TradingDecisionService:
                 logger.info(f"Found {len(similar_memories)} similar past decisions")
             
             final_decision = initial_decision
-            
+
             if len(similar_memories) > 0: 
 
                 # 6. Create enhanced prompt with memory context
@@ -453,7 +454,7 @@ class TradingDecisionService:
             ai_decision = None
             memory_id = None
             order_result = None
-            if final_decision['confidence'] >= 70:
+            if final_decision['confidence'] >= 75:
                 # 8. Save decision to database
                 ai_decision = self._save_decision(symbol, final_decision, prompt_data.get("market_data"))
                 
@@ -536,6 +537,7 @@ class TradingDecisionService:
         ---
         ### POSITION & RISK RULES
         To ensure consistent profitability over time, strictly follow these constraints:
+        - The profit target must be at least +1% from the entry price
         - Maintain a **minimum Reward-to-Risk (RRR)** of **at least 1.5:1** (e.g. aiming for +1.5% gain if risking −1%).
         - The stop-loss and take-profit levels should be chosen such that over many trades, the strategy remains **positively skewed** (expected value > 0).
         - Favor setups where technical confluence and higher-timeframe trend agree with direction.
@@ -605,7 +607,7 @@ class TradingDecisionService:
                     logger.info(f"Opposite direction detected — closing {existing_side.upper()} position before {new_side.upper()} entry")
                     exit_price = float(decision.get('entry_price', existing_position.current_price))
                     existing_position.close_position(exit_price)                            
-                    available_balance = float(portfolio.available_balance_usd)
+                    available_balance = available_balance + existing_position.current_value_usd
                 else:
                     logger.info(f"Same direction detected")
 
