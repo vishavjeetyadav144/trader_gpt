@@ -454,7 +454,7 @@ class TradingDecisionService:
             ai_decision = None
             memory_id = None
             order_result = None
-            if final_decision['confidence'] >= 70:
+            if final_decision['confidence'] >= 65:
                 # 8. Save decision to database
                 ai_decision = self._save_decision(symbol, final_decision, prompt_data.get("market_data"))
                 
@@ -859,7 +859,6 @@ class TradingDecisionService:
     def _save_decision(self, symbol, decision, market_data):
         """Save AI decision to database"""
 
-        print(symbol, decision, market_data)
         try:
             ai_model = AIModel.get_active_model('deepseek')
             if not ai_model:
