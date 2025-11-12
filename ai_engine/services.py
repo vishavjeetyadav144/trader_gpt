@@ -607,7 +607,7 @@ class TradingDecisionService:
                     logger.info(f"Opposite direction detected — closing {existing_side.upper()} position before {new_side.upper()} entry")
                     exit_price = float(decision.get('entry_price', existing_position.current_price))
                     existing_position.close_position(exit_price)                            
-                    available_balance = available_balance + existing_position.current_value_usd
+                    available_balance += float(existing_position.current_value_usd)
                 else:
                     logger.info(f"Same direction detected")
 
