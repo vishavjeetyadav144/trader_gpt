@@ -241,11 +241,13 @@ class LLMPromptGenerator:
             "stop_loss": float,
             "take_profit": [float, float],        # One or multiple take profit levels
             "position_size": int,                 # % of portfolio (integer)
-            "reasoning": str,                     # Detailed explanation (max 400 chars)
-            "risk_factors": [str]                # List of risk factors
+            "reasoning": str,                     # Detailed explanation (max 800 chars)
+            "risk_factors": [str],                # List of risk factors
+            "recheck_price": float                # Price where model expects higher confidence if re-evaluated
         }}
 
         Rules:
+        - Always include "recheck_price": if confidence_level < 70, it must be a valid float (price).
         - Do not include any markdown, commentary, or text outside JSON.
         """
         
@@ -326,6 +328,16 @@ class DeepSeekLLMService:
                     take_profit_value = take_profit_raw[0] #sum(take_profit_raw) / len(take_profit_raw) if take_profit_raw else 0
                 else:
                     take_profit_value = float(take_profit_raw)
+                
+                recheck_price_raw = decision_data.get("recheck_price", None)
+                if recheck_price_raw in [None, "null", "None"]:
+                    recheck_price = None
+                else:
+                    try:
+                        recheck_price = float(recheck_price_raw)
+                    except (TypeError, ValueError):
+                        recheck_price = None
+
 
                 return {
                     "signal": decision_data.get("trading_signal", decision_data.get("signal", "HOLD")).upper(),
@@ -336,7 +348,8 @@ class DeepSeekLLMService:
                     "position_size_pct": float(decision_data.get("position_size", 0)),
                     "reasoning": decision_data.get("reasoning", ""),
                     "risk_factors": decision_data.get("risk_factors", []),
-                    "raw_response": content
+                    "raw_response": content,
+                    "recheck_price": recheck_price
                 }
 
             return self._fallback_parse(content)
@@ -363,7 +376,8 @@ class DeepSeekLLMService:
             "position_size_pct": 0.02,
             "reasoning": content,
             "risk_factors": [],
-            "raw_response": content
+            "raw_response": content,
+            "recheck_price": None
         }
 
 class TradingDecisionService:
@@ -452,7 +466,7 @@ class TradingDecisionService:
             ai_decision = None
             memory_id = None
             order_result = None
-            if final_decision['confidence'] >= 75 and final_decision['signal'] in ['BUY', 'SELL']:
+            if final_decision['confidence'] >= 70 and final_decision['signal'] in ['BUY', 'SELL']:
                 # 8. Save decision to database
                 ai_decision = self._save_decision(symbol, final_decision, prompt_data.get("market_data"))
                 
@@ -469,6 +483,17 @@ class TradingDecisionService:
                 order_result = self._execute_high_confidence_trade(symbol, final_decision, ai_decision)
             else:
                 logger.info(f"Confidence too low ({final_decision['confidence']}%)")
+                if final_decision.get("recheck_price"):
+                    try:
+                        from utils.redis_client import redis_client
+                        if redis_client:
+                            redis_key = f"recheck:{symbol}"
+                            recheck_price = final_decision["recheck_price"]
+                            redis_client.set(redis_key, recheck_price, ex=3600)  # expire after 1 hour
+                            logger.info(f"📈 Stored recheck trigger for {symbol} at price {recheck_price}")
+                    except Exception as e:
+                        logger.error(f"Failed to store recheck_price in Redis: {e}")
+
 
                 
             return {
@@ -555,6 +580,7 @@ class TradingDecisionService:
             "position_size": int,               # position size as % of portfolio (integer)
             "reasoning": str,                   # reasoning combining memory insights (≤500 chars)
             "risk_factors": [str],              # key insights from similar past decisions
+            "recheck_price": float              # Price where model expects higher confidence if re-evaluated
         }}
 
         ---
@@ -621,6 +647,7 @@ class TradingDecisionService:
                 logger.warning(f"Insufficient balance: ${available_balance}")
                 return {"success": False, "error": f"Insufficient balance: ${available_balance}"}
             
+            
             # Use available balance for position size
             position_size_usd = available_balance
             notional_value_usd = position_size_usd * leverage
@@ -633,26 +660,30 @@ class TradingDecisionService:
             
             btc_quantity = notional_value_usd / entry_price
             # Convert BTC quantity to lot size (1 lot = 0.001 BTC)
-            lot_size = 0.001
-            quantity_in_lots = btc_quantity / lot_size
+            contract_value = 0.001
+            quantity_in_lots = btc_quantity / contract_value
 
             # Round to nearest whole lot (or exchange precision)
             quantity_in_lots = int(quantity_in_lots)
+
             if quantity_in_lots <= 0:
                 logger.warning(f"Quantity too small: {quantity_in_lots} lots")
                 return {"success": False, "error": "Quantity too small"}
-
+            
+            taker_fee_rate = 0.0005
+            commission_usd = quantity_in_lots*contract_value*entry_price*taker_fee_rate
+            
             # Calculate required margin for validation
-            required_margin = (quantity_in_lots * lot_size * entry_price) / leverage
-            if required_margin > available_balance:
+            required_margin = (quantity_in_lots * contract_value * entry_price) / leverage + commission_usd
+            
+            if required_margin > available_balance and quantity_in_lots == 1:
                 logger.warning(f"Required margin ${required_margin} exceeds available balance ${available_balance}")
                 return {"success": False, "error": f"Insufficient margin: need ${required_margin}"}
 
-            # Place the order
+            quantity_in_lots -= 1
             order_result = client.place_order(quantity_in_lots, ai_decision)
-    
+
             if order_result:
-      
                 # Create trade record
                 # trade_record = self._create_trade_record(
                 #     symbol, decision, quantity_in_lots, entry_price, ai_decision

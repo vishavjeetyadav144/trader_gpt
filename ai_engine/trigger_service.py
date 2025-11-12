@@ -88,31 +88,54 @@ class TradingTriggerService:
             logger.error(f"Error initializing price: {e}")
     
     def _check_and_decide(self):
-        """Check if we should make a trading decision"""
+        """Check if we should make a trading decision or recheck based on price"""
         try:
-            # Get current price
             current_price = self._get_current_price()
             if not current_price:
                 logger.error("Failed to get current price, skipping check")
                 return
-            
+
             current_time = time.time()
             self.last_price_check_time = current_time
-            
-            # Log current status periodically (every 5 minutes)
+
             if current_time - getattr(self, 'last_status_log', 0) > 300:
                 self._log_status(current_price)
                 self.last_status_log = current_time
-            
-            # Check if we should trigger a decision
+
+            try:
+                from utils.redis_client import redis_client
+                redis_key = f"recheck:{self.config['symbol']}"
+                cached_recheck = redis_client.get(redis_key) if redis_client else None
+
+                if cached_recheck:
+                    target_price = Decimal(str(cached_recheck))
+                    diff = abs(current_price - target_price)
+                    tolerance = Decimal("0.002")  # 0.2% proximity tolerance
+
+                    if diff <= 50:
+                        logger.info(
+                            f"🚨 Recheck trigger hit for {self.config['symbol']} at {current_price} "
+                            f"(target={target_price}, diff={diff}) — invoking re-evaluation"
+                        )
+                        redis_client.delete(redis_key)
+                        self._make_decision_and_update_state(current_price, current_time)
+                        return
+                    else:
+                        logger.debug(
+                            f"Recheck pending for {self.config['symbol']} — target={target_price}, current={current_price}"
+                        )
+            except Exception as re_err:
+                logger.error(f"Error checking Redis recheck trigger: {re_err}")
+
             should_decide, reason = self._should_make_decision(current_price, current_time)
-            logger.info(f"Triggering decision: {should_decide}, reason: {reason}")
+
             if should_decide:
+                logger.info(f"📈 Making new trading decision for {self.config['symbol']} at {current_price}")
                 self._make_decision_and_update_state(current_price, current_time)
-            
+
         except Exception as e:
-            logger.error(f"Error in check and decide: {e}")
-    
+            logger.error(f"Error in check and decide: {e}", exc_info=True)
+
     def _should_make_decision(self, current_price: Decimal, current_time: float) -> tuple[bool, str]:
         """Determine if we should make a trading decision"""
         

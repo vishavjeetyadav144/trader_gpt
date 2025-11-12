@@ -28,7 +28,7 @@ class AiEngineConfig(AppConfig):
                 'price_change_dollar_threshold': 500,  # $200 absolute change
                 'max_time_between_decisions': 30 * 60,  # 30 minutes
                 'min_cooldown_between_decisions': 1 * 60,  # 5 minutes
-                'polling_interval': 30,  # 30 seconds
+                'polling_interval': 1,  # 30 seconds
                 'symbol': 'BTCUSD'
             }
             
