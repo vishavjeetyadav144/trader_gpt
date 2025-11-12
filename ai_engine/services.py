@@ -235,7 +235,7 @@ class LLMPromptGenerator:
         The JSON **must** strictly follow this structure:
 
         {{
-            "trading_signal": "BUY" | "SELL" | "HOLD",
+            "trading_signal": "BUY" | "SELL",
             "confidence_level": float,            # Between 0 and 100
             "entry_price": float,                 # Entry recommendation
             "stop_loss": float,
@@ -247,8 +247,6 @@ class LLMPromptGenerator:
 
         Rules:
         - Do not include any markdown, commentary, or text outside JSON.
-        - **Important:** If the portfolio does **not** currently hold {market_data['symbol']}, `"HOLD"` is **not allowed** as a trading signal.
-        - **Important:** If the portfolio currently holds a position in {market_data['symbol']}, allowed signals are only 'HOLD' or 'SELL' is position is 'BUY' else 'BUY' if position is 'SELL'."
         """
         
         return {
@@ -454,7 +452,7 @@ class TradingDecisionService:
             ai_decision = None
             memory_id = None
             order_result = None
-            if final_decision['confidence'] >= 70:
+            if final_decision['confidence'] >= 75:
                 # 8. Save decision to database
                 ai_decision = self._save_decision(symbol, final_decision, prompt_data.get("market_data"))
                 
@@ -528,7 +526,7 @@ class TradingDecisionService:
         Incorporate *pattern recognition*, *risk bias adjustments*, and *historical success rates* to refine your new decision.
 
         Your analysis **must** answer:
-        1. Do you maintain the same trading signal or change it (BUY/SELL/HOLD)?
+        1. Do you maintain the same trading signal or change it (BUY/SELL)?
         2. Should your confidence level be adjusted based on past trade outcomes?
         3. Are there common failure or success patterns in similar setups that influence this case?
         4. Should entry, stop loss, or take profit be fine-tuned?
