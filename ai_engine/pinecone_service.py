@@ -148,7 +148,7 @@ class PineconeMemoryService:
                     "timestamp": match['metadata'].get('timestamp'),
                     "was_profitable": match['metadata'].get('was_profitable'),
                     "actual_outcome_pct": match['metadata'].get('actual_outcome_pct'),
-                    "reasoning_summary": match['metadata'].get('content', '')[:500]
+                    "reasoning_summary": match['metadata'].get('content', '')
                 }
                 
                 # Get full content from MongoDB if needed
