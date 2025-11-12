@@ -4,7 +4,6 @@ import json
 from datetime import datetime, timezone
 from typing import List, Dict, Any, Optional
 from pinecone import Pinecone, ServerlessSpec
-from sentence_transformers import SentenceTransformer
 from django.conf import settings
 
 from ai_engine.models import LongTermMemory, AIDecision
@@ -46,8 +45,6 @@ class PineconeMemoryService:
 
         self.index = self.pc.Index(self.index_name)
 
-        # Initialize sentence transformer for embeddings
-        # self.encoder = SentenceTransformer('mixedbread-ai/mxbai-embed-large-v1')
     
     def store_decision_memory(self, ai_decision: AIDecision, outcome_data: Optional[Dict] = None):
         """Store AI decision in long-term memory"""
