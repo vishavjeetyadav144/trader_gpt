@@ -262,9 +262,9 @@ class DeepSeekLLMService:
     """DeepSeek LLM integration for trading decisions"""
     
     def __init__(self):
-        self.api_key = settings.AI_CONFIG['DEEPSEEK']['API_KEY']
-        self.base_url = settings.AI_CONFIG['DEEPSEEK']['BASE_URL']
-        self.model = settings.AI_CONFIG['DEEPSEEK']['MODEL']
+        self.api_key = settings.AI_CONFIG['OPENAI']['API_KEY']
+        self.base_url = settings.AI_CONFIG['OPENAI']['BASE_URL']
+        self.model = settings.AI_CONFIG['OPENAI']['MODEL']
         
         if not self.api_key:
             raise ValueError("DeepSeek API key not configured")
@@ -422,7 +422,7 @@ class TradingDecisionService:
                 return None
             
             logger.info(f"Initial decision: {initial_decision['signal']} with {initial_decision['confidence']}% confidence")
-            
+             
             # 5. Check similarity in Pinecone memory (if available)
             similar_memories = []
             memory_summary = ""
