@@ -143,7 +143,7 @@ class AIDecision(Document):
         self.status = 'executed'
         self.save()
 
-    def evaluate_outcome(self, current_price, realized_pnl_usd=None):
+    def evaluate_outcome(self, current_price, realized_pnl_usd=None, entry_value_usd=None):
         """Evaluate the outcome of the decision and update both local DB and Pinecone memory"""
         if self.recommended_entry and current_price:
             price_change_pct = (current_price - self.recommended_entry) / self.recommended_entry
@@ -174,7 +174,8 @@ class AIDecision(Document):
                         was_profitable=self.was_profitable,
                         actual_pnl=float(realized_pnl_usd) if realized_pnl_usd is not None else 0.0,
                         price_change_pct=float(price_change_pct),
-                        exit_price=float(current_price)
+                        exit_price=float(current_price),
+                        entry_value_usd=float(entry_value_usd)
                     )
                     
                     from django.utils import timezone

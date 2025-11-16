@@ -314,7 +314,7 @@ class PineconeMemoryService:
             "full_content": "\n".join(full_content_parts)
         }
     
-    def update_decision_performance(self, pinecone_id: str, was_profitable: bool, actual_pnl: float, price_change_pct: float, exit_price: float):
+    def update_decision_performance(self, pinecone_id: str, was_profitable: bool, actual_pnl: float, price_change_pct: float, exit_price: float, entry_value_usd: float):
         """Update decision performance in Pinecone memory"""
         try:
             # Update Pinecone metadata
@@ -328,7 +328,7 @@ class PineconeMemoryService:
                 # Update metadata
                 current_metadata.update({
                     'was_profitable': was_profitable,
-                    'actual_outcome_pct': price_change_pct,
+                    'actual_outcome_pct': round((actual_pnl / entry_value_usd) * 100, 4),
                     'actual_pnl_usd': actual_pnl,
                     'exit_price': exit_price,
                     'outcome_updated_at': datetime.now(timezone.utc).isoformat(),

@@ -9,8 +9,10 @@ from exchanges.services import DeltaExchangeClient, TechnicalAnalysisService, Po
 from portfolio.models import Portfolio, Position
 from ai_engine.models import AIDecision, AIModel
 from accounts.models import TradingUser
+import re
 
 logger = logging.getLogger(__name__)
+
 
 
 class LLMPromptGenerator:
@@ -417,6 +419,7 @@ class TradingDecisionService:
         
             # 4. Parse initial decision
             initial_decision = self.llm_service.parse_trading_decision(initial_llm_response)
+   
             if not initial_decision:
                 logger.error("Failed to parse initial LLM decision")
                 return None
@@ -572,7 +575,7 @@ class TradingDecisionService:
         Expected schema:
 
         {{
-            "trading_signal": "BUY" | "SELL" | "HOLD",
+            "trading_signal": "BUY" | "SELL",
             "confidence_level": float,          # 0–100, updated after memory review
             "entry_price": float,               # refined entry price
             "stop_loss": float,                 # adjusted stop loss
@@ -916,3 +919,166 @@ class TradingDecisionService:
         except Exception as e:
             logger.error(f"Error saving AI decision: {e}")
             return None
+
+class OpenAITradingLLMService:
+    """OpenAI GPT-5 integration for trading decisions with sentiment-aware web search"""
+
+    def __init__(self):
+        self.api_key = settings.AI_CONFIG['OPENAI']['API_KEY']
+        self.model = "gpt-5"
+        self.client = OpenAI(api_key=self.api_key)
+
+    def _extract_json(self, text: str):
+        """Extract valid JSON from model output"""
+        try:
+            m = re.search(r"\{.*\}", text, re.DOTALL)
+            return json.loads(m.group(0)) if m else None
+        except Exception as e:
+            logger.error(f"JSON parse error: {e}")
+            return None
+
+    def _validate(self, d: dict) -> bool:
+        """Risk-rule enforcement"""
+        try:
+            if d["trading_signal"] == "NO_TRADE":
+                return True
+
+            entry, sl, tps = d["entry_price"], d["stop_loss"], d["take_profit"]
+            tp = max(tps)
+
+            risk_pct = abs(entry - sl) / entry * 100
+            reward_pct = abs(tp - entry) / entry * 100
+
+            if risk_pct < 0.75: return False
+            if reward_pct < 1.5: return False
+            if reward_pct / risk_pct < 2.0: return False
+
+            return True
+        except Exception:
+            return False
+
+    def get_trading_decision(self, prompt_data, image_b64=None):
+        """Query GPT-5 w/ sentiment search enabled"""
+        try:
+            response = self.client.responses.create(
+                model=self.model,
+                input=[
+                    {
+                        "role": "user",
+                        "content": [
+                            {"type": "input_text", "text": prompt_data["prompt"]}#,
+                            # *(
+                            #     [{
+                            #         "type": "input_image",
+                            #         "image_url": f"data:image/png;base64,{image_b64}"
+                            #     }] if image_b64 else []
+                            # )
+                        ]
+                    }
+                ],
+                tools=[{
+                    "type": "web_search",
+                    # "web_search": {
+                    #     "recency": 1,
+                    #     "domains": [
+                    #         "reuters.com", "coindesk.com", "cointelegraph.com",
+                    #         "decrypt.co", "theblock.co", "bitcoinmagazine.com",
+                    #         "bloomberg.com", "wsj.com", "cnbc.com", "ft.com",
+                    #         "marketwatch.com", "businessinsider.com", "forbes.com",
+                    #         "yahoo.com", "investing.com", "fxstreet.com",
+                    #         "ambcrypto.com", "cryptoslate.com"
+                    #     ]
+                    # }
+                }],
+                text={"verbosity": "high"}
+            )
+
+
+            raw = response.output_text
+            print("raw value --------------", raw)
+            return  {
+                "response": raw,
+                "usage": getattr(response, "usage", {}),
+                "model": self.model
+            }
+
+        except Exception as e:
+            logger.error(f"GPT-5 API failure: {e}", exc_info=True)
+            return {
+                "response": {
+                    "trading_signal": "NO_TRADE",
+                    "reasoning": "API exception triggered fail-safe"
+                },
+                "model": self.model
+            }
+
+    def parse_trading_decision(self, llm_response):
+        """Parse LLM response into structured trading decision"""
+        try:
+            content = llm_response["response"]
+            start_idx = content.find('{')
+            end_idx = content.rfind('}') + 1
+
+            if start_idx >= 0 and end_idx > start_idx:
+                json_str = content[start_idx:end_idx]
+                decision_data = json.loads(json_str)
+
+                # Handle take_profit flexibly
+                take_profit_raw = decision_data.get("take_profit", [])
+                if isinstance(take_profit_raw, list):
+                    # You can decide how to handle: average or first
+                    take_profit_value = take_profit_raw[0] #sum(take_profit_raw) / len(take_profit_raw) if take_profit_raw else 0
+                else:
+                    take_profit_value = float(take_profit_raw)
+                
+                recheck_price_raw = decision_data.get("recheck_price", None)
+                if recheck_price_raw in [None, "null", "None"]:
+                    recheck_price = None
+                else:
+                    try:
+                        recheck_price = float(recheck_price_raw)
+                    except (TypeError, ValueError):
+                        recheck_price = None
+
+
+                return {
+                    "signal": decision_data.get("trading_signal", decision_data.get("signal", "HOLD")).upper(),
+                    "confidence": float(decision_data.get("confidence_level", decision_data.get("confidence", 0))),
+                    "entry_price": float(decision_data.get("entry_price", 0)),
+                    "stop_loss": float(decision_data.get("stop_loss", 0)),
+                    "take_profit": take_profit_value,
+                    "position_size_pct": float(decision_data.get("position_size", 0)),
+                    "reasoning": decision_data.get("reasoning", ""),
+                    "risk_factors": decision_data.get("risk_factors", []),
+                    "raw_response": content,
+                    "recheck_price": recheck_price
+                }
+
+            return self._fallback_parse(content)
+
+        except Exception as e:
+            logger.error(f"Error parsing LLM decision: {e}", exc_info=True)
+            return None
+
+
+    def _fallback_parse(self, content):
+        """Fallback parsing for non-JSON responses"""
+        signal = "HOLD"
+        if "BUY" in content.upper():
+            signal = "BUY"
+        elif "SELL" in content.upper():
+            signal = "SELL"
+
+        return {
+            "signal": signal,
+            "confidence": 50,
+            "entry_price": 0,
+            "stop_loss": 0,
+            "take_profit": 0,
+            "position_size_pct": 0.02,
+            "reasoning": content,
+            "risk_factors": [],
+            "raw_response": content,
+            "recheck_price": None
+        }
+
