@@ -682,8 +682,10 @@ class TradingDecisionService:
             if required_margin > available_balance and quantity_in_lots == 1:
                 logger.warning(f"Required margin ${required_margin} exceeds available balance ${available_balance}")
                 return {"success": False, "error": f"Insufficient margin: need ${required_margin}"}
+            elif required_margin >= available_balance:
+                quantity_in_lots -= 1
 
-            quantity_in_lots -= 1
+
             order_result = client.place_order(quantity_in_lots, ai_decision)
 
             if order_result:
