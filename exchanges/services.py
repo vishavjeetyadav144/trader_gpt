@@ -105,10 +105,10 @@ class DeltaExchangeClient:
         
         order_data = {
             "product_symbol": ai_decision.symbol,
-            "limit_price": ai_decision.recommended_entry,
+            #"limit_price": ai_decision.recommended_entry,
             "size": quantity,
             "side": ai_decision.decision_type,
-            "order_type": "limit_order",
+            "order_type": "market_order",
             "bracket_stop_loss_price": ai_decision.recommended_stop_loss,
             "bracket_take_profit_price": ai_decision.recommended_take_profit
         }
