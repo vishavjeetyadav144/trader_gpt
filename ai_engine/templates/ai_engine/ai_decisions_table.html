@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>AI Decisions</title>
+    <style>
+        :root {
+            --bg: #f8fafc;
+            --panel: #ffffff;
+            --muted: #64748b;
+            --text: #0f172a;
+            --border: #e5e7eb;
+            --accent: #2563eb;
+            --accent-2: #7c3aed;
+            --good: #16a34a;
+            --bad: #dc2626;
+            --warn: #d97706;
+        }
+        * { box-sizing: border-box; }
+        html, body { background: var(--bg); color: var(--text); font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Apple Color Emoji", "Segoe UI Emoji"; }
+        body { margin: 0; padding: 24px; }
+        .container { max-width: 1200px; margin: 0 auto; }
+        .header { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; }
+        h1 { margin: 0; font-size: 24px; }
+        .sub { color: var(--muted); font-size: 13px; }
+
+        .card { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; padding: 16px; margin-top: 16px; }
+        .controls { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+        label { color: var(--muted); font-size: 13px; }
+        input[type="text"] { padding: 8px 10px; border: 1px solid var(--border); background: #fff; color: var(--text); border-radius: 8px; }
+        button, .button { padding: 8px 10px; border: 1px solid var(--border); background: #fff; color: var(--text); border-radius: 8px; cursor: pointer; }
+        .button { display: inline-block; text-decoration: none; }
+        button:hover, .button:hover { border-color: #cbd5e1; }
+
+        .table-wrap { overflow: auto; border: 1px solid var(--border); border-radius: 12px; background: var(--panel); }
+        table { width: 100%; border-collapse: collapse; }
+        thead th { position: sticky; top: 0; background: #f1f5f9; font-weight: 600; color: #334155; }
+        th, td { border-bottom: 1px solid var(--border); padding: 10px 12px; font-size: 13px; text-align: left; vertical-align: top; }
+        tbody tr:hover { background: #f8fafc; }
+        .nowrap { white-space: nowrap; }
+        .small { font-size: 12px; color: var(--muted); }
+
+        .pill { padding: 2px 8px; border-radius: 9999px; font-size: 12px; display: inline-block; border: 1px solid var(--border); background: #fff; }
+        .status-pending { background: #fffbeb; color: var(--warn); }
+        .status-executed { background: #ecfdf5; color: var(--good); }
+        .status-ignored { background: #f8fafc; color: var(--muted); }
+        .status-expired { background: #fef2f2; color: var(--bad); }
+        .chip { background: #eff6ff; color: #1d4ed8; padding: 2px 6px; border-radius: 9999px; font-size: 12px; }
+        .positive { color: var(--good); font-weight: 600; }
+        .negative { color: var(--bad); font-weight: 600; }
+
+        .actions { display: flex; align-items: center; gap: 8px; }
+        .view-btn { padding: 6px 10px; border-radius: 8px; border: 1px solid var(--border); background: #fff; color: var(--text); cursor: pointer; }
+        .view-btn:hover { border-color: #cbd5e1; }
+        .reason-snippet { max-width: 280px; color: #0f172a; }
+
+        /* Modal */
+        .modal { position: fixed; inset: 0; display: none; align-items: center; justify-content: center; padding: 16px; }
+        .modal.open { display: flex; }
+        .modal .overlay { position: absolute; inset: 0; background: rgba(15, 23, 42, 0.35); }
+        .modal .dialog { position: relative; z-index: 1; width: 100%; max-width: 900px; background: var(--panel); border: 1px solid var(--border); border-radius: 12px; box-shadow: 0 10px 30px rgba(0,0,0,0.12); }
+        .dialog header { display: flex; align-items: center; justify-content: space-between; padding: 14px 16px; border-bottom: 1px solid var(--border); }
+        .dialog header h2 { margin: 0; font-size: 18px; }
+        .dialog header .close { border: 1px solid var(--border); background: #fff; border-radius: 8px; padding: 6px 10px; cursor: pointer; }
+        .dialog .content { padding: 16px; display: grid; grid-template-columns: 1fr; gap: 12px; }
+        @media (min-width: 900px) { .dialog .content { grid-template-columns: 1fr 1fr 1fr; } }
+        .panel { border: 1px solid var(--border); border-radius: 10px; padding: 12px; background: #fff; }
+        .panel h3 { margin: 0 0 8px; font-size: 14px; color: #0f172a; }
+        .muted { color: var(--muted); }
+        pre { margin: 0; font-size: 12px; color: #0f172a; background: #f8fafc; border: 1px solid var(--border); padding: 8px; border-radius: 8px; overflow: auto; max-height: 320px; }
+        .risk-list { display: flex; flex-wrap: wrap; gap: 6px; }
+        .risk { background: #fef2f2; color: #b91c1c; border: 1px solid #fecaca; padding: 2px 6px; border-radius: 9999px; font-size: 12px; }
+        .stats { display:flex; gap:12px; flex-wrap:wrap; margin-top:16px; }
+        .stat { flex:1 1 220px; background:#fff; border:1px solid var(--border); border-radius:12px; padding:12px 14px; }
+        .stat .label { font-size:12px; color:var(--muted); margin-bottom:4px; }
+        .stat .value { font-size:22px; font-weight:700; }
+        .stat .value.good { color: var(--good); }
+        .stat .value.bad { color: var(--bad); }
+    </style>
+    <script>
+        function readJSON(id) {
+            const el = document.getElementById(id);
+            if (!el) return null;
+            try { return JSON.parse(el.textContent); } catch (e) { return null; }
+        }
+        function openModal(idx) {
+            const modal = document.getElementById('details-modal');
+            if (!modal) return;
+
+            const symbol = document.getElementById('sym-' + idx)?.textContent || '';
+            const decisionId = document.getElementById('did-' + idx)?.textContent || '';
+
+            const reason = readJSON('reason-' + idx) || '';
+            const risks = readJSON('risks-' + idx) || [];
+            const mc = readJSON('mc-' + idx) || {};
+
+            // Fill title
+            const title = document.getElementById('modal-title');
+            title.textContent = symbol ? (symbol + ' · ' + decisionId) : ('Decision ' + decisionId);
+
+            // Reasoning
+            const rEl = document.getElementById('modal-reasoning');
+            rEl.textContent = reason || 'No reasoning provided.';
+
+            // Risks
+            const list = document.getElementById('modal-risks');
+            list.innerHTML = '';
+            if (Array.isArray(risks) && risks.length) {
+                risks.forEach(r => {
+                    const span = document.createElement('span');
+                    span.className = 'risk';
+                    span.textContent = r;
+                    list.appendChild(span);
+                });
+            } else {
+                const span = document.createElement('span');
+                span.className = 'small';
+                span.textContent = 'No risks recorded.';
+                list.appendChild(span);
+            }
+
+            // Market context
+            const mcEl = document.getElementById('modal-mc');
+            try {
+                mcEl.textContent = Object.keys(mc || {}).length ? JSON.stringify(mc, null, 2) : 'No market context available.';
+            } catch (e) {
+                mcEl.textContent = 'No market context available.';
+            }
+
+            modal.classList.add('open');
+        }
+        function closeModal() {
+            const modal = document.getElementById('details-modal');
+            if (modal) modal.classList.remove('open');
+        }
+        document.addEventListener('keydown', function(e){ if (e.key === 'Escape') closeModal(); });
+    </script>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>AI Decisions</h1>
+            <div class="sub">Most recent first</div>
+        </div>
+
+        <div class="stats">
+            <div class="stat">
+                <div class="label">Profitable</div>
+                <div class="value good">{{ profitable_count }}</div>
+            </div>
+            <div class="stat">
+                <div class="label">Non-Profitable</div>
+                <div class="value bad">{{ non_profitable_count }}</div>
+            </div>
+        </div>
+
+        <div class="card">
+            <form method="get" class="controls">
+                <label for="symbol">Filter by symbol</label>
+                <input id="symbol" name="symbol" type="text" placeholder="e.g. BTC" value="{{ selected_symbol }}" />
+                <button type="submit">Apply</button>
+                <a class="button" href="?">Reset</a>
+            </form>
+        </div>
+
+        <div class="table-wrap" style="margin-top:16px;">
+            <table>
+                <thead>
+                    <tr>
+                        <th class="nowrap">Created</th>
+                        <th>Decision ID</th>
+                        <th>Symbol</th>
+                        <th>Type</th>
+                        <th>Confidence</th>
+                        <th>Entry</th>
+                        <th>Stop Loss</th>
+                        <th>Take Profit</th>
+                        <th>Pos Size</th>
+                        <th>Status</th>
+                        <th>Outcome</th>
+                        <th class="nowrap">Actual Pct</th>
+                        <th class="nowrap">Reasoning</th>
+                        <th class="nowrap">Risks</th>
+                        <th></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for decision in decisions %}
+                        {% with idx=forloop.counter0 %}
+                        <tr>
+                            <td class="nowrap small">{{ decision.created_at|date:"Y-m-d H:i:s" }}</td>
+                            <td id="did-{{ idx }}" class="small">{{ decision.decision_id }}</td>
+                            <td id="sym-{{ idx }}"><span class="chip">{{ decision.symbol }}</span></td>
+                            <td>{{ decision.decision_type|upper }}</td>
+                            <td>{{ decision.confidence_score|floatformat:2 }}</td>
+                            <td>{{ decision.recommended_entry|default:"-" }}</td>
+                            <td>{{ decision.recommended_stop_loss|default:"-" }}</td>
+                            <td>{{ decision.recommended_take_profit|default:"-" }}</td>
+                            <td>{{ decision.position_size_pct|floatformat:2|default:"-" }}</td>
+                            <td>
+                                <span class="pill status-{{ decision.status }}">{{ decision.status|title }}</span>
+                            </td>
+                            <td>
+                                {% if decision.was_profitable == True %}
+                                    <span class="positive">Profitable</span>
+                                {% elif decision.was_profitable == False %}
+                                    <span class="negative">Not Profitable</span>
+                                {% else %}
+                                    <span class="small">-</span>
+                                {% endif %}
+                            </td>
+                            <td>{{ decision.actual_outcome|floatformat:4|default:"-" }}</td>
+                            <td class="reason-snippet small" title="{{ decision.reasoning|default:'-' }}">{{ decision.reasoning|default:"-"|truncatechars:80 }}</td>
+                            <td class="small">{% if decision.risk_factors %}{{ decision.risk_factors|length }}{% else %}0{% endif %}</td>
+                            <td class="actions">
+                                <button type="button" class="view-btn" onclick="openModal('{{ idx }}')">Details</button>
+                            
+                                {{ decision.reasoning|default:""|json_script:"reason-"|add:idx }}
+                                {{ decision.risk_factors|json_script:"risks-"|add:idx }}
+                                {{ decision.market_context|json_script:"mc-"|add:idx }}
+                            </td>
+                        </tr>
+                        {% endwith %}
+                    {% empty %}
+                        <tr><td colspan="15" class="small">No AI decisions found.</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Modal -->
+    <div id="details-modal" class="modal" aria-hidden="true" role="dialog" aria-labelledby="modal-title">
+        <div class="overlay" onclick="closeModal()"></div>
+        <div class="dialog">
+            <header>
+                <h2 id="modal-title">Decision Details</h2>
+                <button class="close" onclick="closeModal()">Close</button>
+            </header>
+            <div class="content">
+                <div class="panel">
+                    <h3>Reasoning</h3>
+                    <div class="muted">AI explanation for this decision</div>
+                    <div id="modal-reasoning" style="margin-top:6px; white-space: pre-wrap;">-</div>
+                </div>
+                <div class="panel">
+                    <h3>Risk Factors</h3>
+                    <div class="muted">Key risks considered by AI</div>
+                    <div id="modal-risks" class="risk-list" style="margin-top:6px;"></div>
+                </div>
+                <div class="panel">
+                    <h3>Market Context</h3>
+                    <div class="muted">Indicators and context used</div>
+                    <pre id="modal-mc" style="margin-top:6px;">-</pre>
+                </div>
+            </div>
+        </div>
+    </div>
+</body>
+</html>

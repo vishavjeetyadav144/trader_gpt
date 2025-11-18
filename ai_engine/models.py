@@ -156,7 +156,7 @@ class AIDecision(Document):
                 # For other decision types, use realized PnL if available
                 self.was_profitable = realized_pnl_usd > 0 if realized_pnl_usd is not None else price_change_pct > 0
             
-            self.actual_outcome = Decimal(str(price_change_pct))
+            self.actual_outcome = round((float(realized_pnl_usd) / float(entry_value_usd)) * 100, 4)
             self.save()
             
             # Update model performance
