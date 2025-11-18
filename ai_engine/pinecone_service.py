@@ -104,7 +104,7 @@ class PineconeMemoryService:
             logger.error(f"Error storing decision memory: {e}")
             return None
     
-    def find_similar_decisions(self, current_reasoning: str, symbol: str, market_context: Optional[Dict] = None, risk_factors: Optional[List[str]] = None, top_k: int = 3, min_similarity: float = 0.8) -> List[Dict]:
+    def find_similar_decisions(self, current_reasoning: str, symbol: str, market_context: Optional[Dict] = None, risk_factors: Optional[List[str]] = None, top_k: int = 3, min_similarity: float = 0.85) -> List[Dict]:
         """Find similar past decisions using semantic search"""
         try:
             # Create search query embedding
