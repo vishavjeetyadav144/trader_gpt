@@ -179,7 +179,7 @@ class Position(Document):
             # Full close
             self.is_open = False
             self.closed_at = datetime.utcnow()
-            self.quantity = Decimal('0')
+            # self.quantity = Decimal('0')
         else:
             # Partial close
             self.quantity -= exit_quantity
