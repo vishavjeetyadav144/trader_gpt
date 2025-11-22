@@ -434,9 +434,9 @@ class TradingDecisionService:
             if not initial_llm_response:
                 logger.error("Failed to get initial LLM response")
                 return None
-            logger.info("====================================")
-            logger.info(prompt_data)
-            logger.info("====================================")
+            print("====================================")
+            print(prompt_data)
+            print("====================================")
             # 4. Parse initial decision
             initial_decision = self.llm_service.parse_trading_decision(initial_llm_response)
             if not initial_decision:
