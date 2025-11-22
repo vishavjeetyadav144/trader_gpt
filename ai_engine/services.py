@@ -434,7 +434,7 @@ class TradingDecisionService:
             if not initial_llm_response:
                 logger.error("Failed to get initial LLM response")
                 return None
-        
+            print(initial_llm_response)
             # 4. Parse initial decision
             initial_decision = self.llm_service.parse_trading_decision(initial_llm_response)
             if not initial_decision:
@@ -486,13 +486,10 @@ class TradingDecisionService:
             memory_id = None
             order_result = None
             if final_decision['confidence'] >= 68 and final_decision['signal'] in ['BUY', 'SELL']:
-                # 8. Save decision to database
                 ai_decision = self._save_decision(symbol, final_decision, prompt_data.get("market_data"))
                 
-                # 9. Store in memory for future reference
                 if self.memory_service and ai_decision:
                     memory_id = self.memory_service.store_decision_memory(ai_decision)
-                    # Store the Pinecone ID in the AI decision for later performance updates
                     if memory_id:
                         ai_decision.pinecone_id = memory_id
                         ai_decision.save()
@@ -500,6 +497,11 @@ class TradingDecisionService:
                 # 10. Execute trade if confidence > 80%
                 logger.info(f"High confidence ({final_decision['confidence']}%) - executing trade")
                 order_result = self._execute_high_confidence_trade(symbol, final_decision, ai_decision)
+            
+            elif final_decision['signal'] == 'HOLD' and final_decision['confidence'] < 65:
+                logger.info(f"Low confidence HOLD decision ({final_decision['confidence']}%)")
+                self._close_position_on_hold(symbol, final_decision)
+                
             else:
                 logger.info(f"Confidence too low ({final_decision['confidence']}%)")
                 if final_decision.get("recheck_price"):
@@ -626,7 +628,44 @@ class TradingDecisionService:
             "market_data": original_prompt_data['market_data'],
             "portfolio_data": original_prompt_data['portfolio_data']
         }
-    
+
+    def _close_position_on_hold(self, symbol, final_decision):
+        """Close existing position if HOLD decision with low confidence"""
+        try:
+            from portfolio.models import Position
+            from exchanges.services import DeltaExchangeClient
+
+            existing_position = Position.get_position_by_symbol(symbol)
+            if not existing_position:
+                logger.info(f"No open position for {symbol} to close on HOLD decision.")
+                return {"success": False, "message": "No position"}
+
+            logger.info(
+                f"Closing position due to HOLD decision <65% confidence — "
+                f"{symbol} {existing_position.side.upper()} "
+                f"qty={existing_position.quantity}"
+            )
+
+            client = DeltaExchangeClient()
+
+            # Close on exchange
+            client.close_position(existing_position)
+
+            # Use entry price from decision or fallback to current price
+            # exit_price = float(
+            #     final_decision.get('entry_price') or existing_position.current_price
+            # )
+            # existing_position.close_position(exit_price)
+
+            # # Sync portfolio state after closing
+            # self._sync_portfolio_after_trade()
+
+            return {"success": True, "action": "closed_position"}
+
+        except Exception as e:
+            logger.error(f"Error closing position on HOLD: {e}")
+            return {"success": False, "error": str(e)}
+
     def _execute_high_confidence_trade(self, symbol, decision, ai_decision):
         """Execute trade for high confidence decisions (>80%)"""
         try:
