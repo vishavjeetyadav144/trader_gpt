@@ -76,6 +76,18 @@ class LLMPromptGenerator:
                     "unrealized_pnl": float(pos.unrealized_pnl_usd),
                     "pnl_pct": float((pos.current_price - pos.entry_price) / pos.entry_price * 100)
                 })
+
+            trades = Position.get_trades_history()
+            trade_data = []
+
+            for t in trades:
+                trade_data.append({
+                    "symbol": t.symbol,
+                    "side": t.side,
+                    "quantity": float(t.quantity),
+                    "entry_price": float(t.entry_price),
+                    "realized_pnl_usd": float(t.realized_pnl_usd)
+                })
             
             return {
                 "total_value": float(portfolio.total_value_usd),
@@ -83,7 +95,8 @@ class LLMPromptGenerator:
                 "unrealized_pnl": float(portfolio.unrealized_pnl_usd),
                 "open_positions": position_data,
                 "positions_count": len(position_data),
-                "daily_pnl_pct": float(portfolio.daily_return_pct or 0)
+                "daily_pnl_pct": float(portfolio.daily_return_pct or 0),
+                "trade_data": trade_data
             }
             
         except Exception as e:
@@ -196,6 +209,8 @@ class LLMPromptGenerator:
         # You have been invoked 6635 times.
 
         # Add the trading context prompt
+        trades = portfolio_data.get("trade_data", [])
+
         trading_prompt = f"""
         You are an expert crypto swing trader analyzing {market_data['symbol']}.
         Below is a complete snapshot of the environment, including market data, predictive signals, and your portfolio state.
@@ -209,7 +224,10 @@ class LLMPromptGenerator:
         
         ---
         ### PORTFOLIO DATA
-        {json.dumps(portfolio_data, indent=2)}
+        {json.dumps({k: v for k, v in portfolio_data.items() if k != "trade_data"}, indent=2)}
+
+        ### LAST 3 TRADES
+        {json.dumps(trades, indent=2)}
 
         ---
         ### YOUR TASK
@@ -419,13 +437,11 @@ class TradingDecisionService:
         
             # 4. Parse initial decision
             initial_decision = self.llm_service.parse_trading_decision(initial_llm_response)
-   
             if not initial_decision:
                 logger.error("Failed to parse initial LLM decision")
                 return None
             
-            logger.info(f"Initial decision: {initial_decision['signal']} with {initial_decision['confidence']}% confidence")
-            
+            logger.info(f"Initial decision: {initial_decision['signal']} with {initial_decision['confidence']}% confidence") 
             # 5. Check similarity in Pinecone memory (if available)
             similar_memories = []
             memory_summary = ""
@@ -516,6 +532,10 @@ class TradingDecisionService:
     
     def _create_enhanced_prompt(self, original_prompt_data, initial_decision, memory_summary):
         """Create enhanced prompt with memory context"""
+
+        portfolio_data = original_prompt_data['portfolio_data']
+        trades = portfolio_data.get("trade_data", [])
+
         enhanced_prompt = f"""
         You are an expert **crypto swing trader** with access to your **trading memory** and **historical performance**.  
         You previously made an initial trading decision, and now you have access to similar past trades and their outcomes.  
@@ -530,7 +550,10 @@ class TradingDecisionService:
         {json.dumps(original_prompt_data['market_data'], indent=2)}
 
         ### ORIGINAL PORTFOLIO DATA
-        {json.dumps(original_prompt_data['portfolio_data'], indent=2)}
+        {json.dumps({k: v for k, v in portfolio_data.items() if k != "trade_data"}, indent=2)}
+
+        ### LAST 3 TRADES
+        {json.dumps(trades, indent=2)}
 
         ---
 

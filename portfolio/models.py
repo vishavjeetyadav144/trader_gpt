@@ -114,6 +114,14 @@ class Position(Document):
         if primary_portfolio:
             return cls.objects(portfolio=primary_portfolio, is_open=True)
         return cls.objects.none()
+    
+    @classmethod
+    def get_trades_history(cls):
+        """Get last three open positions for primary portfolio"""
+        primary_portfolio = Portfolio.get_primary_portfolio()
+        if primary_portfolio:
+            return cls.objects(portfolio=primary_portfolio, is_open=False).order_by('-id')[:3]
+        return cls.objects.none()
 
     @classmethod
     def get_position_by_symbol(cls, symbol):
