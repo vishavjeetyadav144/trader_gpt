@@ -498,7 +498,7 @@ class TradingDecisionService:
                 logger.info(f"High confidence ({final_decision['confidence']}%) - executing trade")
                 order_result = self._execute_high_confidence_trade(symbol, final_decision, ai_decision)
             
-            elif final_decision['signal'] == 'HOLD' and final_decision['confidence'] < 65:
+            elif final_decision['signal'] == 'HOLD' and final_decision['confidence'] < 60:
                 logger.info(f"Low confidence HOLD decision ({final_decision['confidence']}%)")
                 self._close_position_on_hold(symbol, final_decision)
                 
