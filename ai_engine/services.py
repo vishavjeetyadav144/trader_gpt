@@ -639,6 +639,9 @@ class TradingDecisionService:
             if not existing_position:
                 logger.info(f"No open position for {symbol} to close on HOLD decision.")
                 return {"success": False, "message": "No position"}
+            elif existing_position.unrealized_pnl_usd > 0 :
+                logger.info(f"Open position for {symbol} is in profit.")
+                return {"success": False, "message": "Position in profit"}
 
             logger.info(
                 f"Closing position due to HOLD decision <65% confidence — "
