@@ -711,7 +711,7 @@ class TradingDecisionService:
                     
 
             # Ensure we have minimum balance
-            if available_balance < 10:  # Minimum $10 available
+            if available_balance < 5:  # Minimum $10 available
                 logger.warning(f"Insufficient balance: ${available_balance}")
                 return {"success": False, "error": f"Insufficient balance: ${available_balance}"}
             
